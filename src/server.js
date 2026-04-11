@@ -1,136 +1,112 @@
-require("dotenv").config();
-
-const express = require("express");
-const cors = require("cors");
-const { Pool } = require("pg");
+const express = require('express');
+const cors = require('cors');
+const { Pool } = require('pg');
 
 const app = express();
-
-// ================= MIDDLEWARE =================
-app.use(cors({
-  origin: "*"
-}));
+app.use(cors());
 app.use(express.json());
 
-// ================= DATABASE =================
-const db = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false
-  }
+// HANDLE ERROR GLOBAL (ANTI HTML ERROR)
+app.use((err, req, res, next) => {
+  console.error("GLOBAL ERROR:", err);
+  res.status(500).json({ success: false, message: "Server crash" });
 });
 
-// TEST CONNECTION
-db.connect()
-  .then(() => console.log("✅ DB CONNECTED"))
-  .catch(err => console.log("❌ DB ERROR:", err));
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
+});
 
-// ================= ROOT =================
-app.get("/", (req, res) => {
-  res.send("INDOTEX LICENSE API RUNNING 🚀");
+// TEST
+app.get('/', (req, res) => {
+  res.json({ status: "INDOTEX API RUNNING 🚀" });
 });
 
 // ================= USERS =================
-
-// GET USERS
-app.get("/api/users", async (req, res) => {
+app.get('/api/users', async (req, res) => {
   try {
-    const result = await db.query("SELECT * FROM users ORDER BY id DESC");
+    const result = await pool.query('SELECT * FROM users ORDER BY id DESC');
     res.json({ users: result.rows });
-  } catch (e) {
-    console.log(e);
+  } catch (err) {
+    console.error(err);
     res.json({ users: [] });
   }
 });
 
-// CREATE USER
-app.post("/api/users", async (req, res) => {
-  const { username, password } = req.body;
-
+app.post('/api/users', async (req, res) => {
   try {
-    await db.query(
-      "INSERT INTO users (username, password) VALUES ($1,$2)",
+    const { username, password } = req.body;
+
+    await pool.query(
+      'INSERT INTO users (username, password) VALUES ($1,$2)',
       [username, password]
     );
 
     res.json({ success: true });
-  } catch (e) {
-    console.log(e);
-    res.json({ success: false });
-  }
-});
-
-// DELETE USER
-app.delete("/api/users/:id", async (req, res) => {
-  try {
-    await db.query("DELETE FROM users WHERE id=$1", [req.params.id]);
-    res.json({ success: true });
-  } catch (e) {
+  } catch (err) {
+    console.error(err);
     res.json({ success: false });
   }
 });
 
 // ================= SCRIPTS =================
-
-// GET SCRIPTS
-app.get("/api/scripts", async (req, res) => {
+app.get('/api/scripts', async (req, res) => {
   try {
-    const result = await db.query("SELECT * FROM scripts ORDER BY id DESC");
+    const result = await pool.query('SELECT * FROM scripts ORDER BY id DESC');
     res.json({ scripts: result.rows });
-  } catch (e) {
+  } catch (err) {
+    console.error(err);
     res.json({ scripts: [] });
   }
 });
 
-// CREATE SCRIPT
-app.post("/api/scripts", async (req, res) => {
-  const { name } = req.body;
-
+app.post('/api/scripts', async (req, res) => {
   try {
-    await db.query(
-      "INSERT INTO scripts (name) VALUES ($1)",
+    const { name } = req.body;
+
+    await pool.query(
+      'INSERT INTO scripts (name) VALUES ($1)',
       [name]
     );
 
     res.json({ success: true });
-  } catch (e) {
+  } catch (err) {
+    console.error(err);
     res.json({ success: false });
   }
 });
 
-// ================= ASSIGN SCRIPT =================
-
-app.post("/api/assign-script", async (req, res) => {
-  const { user_id, script_id, expires_at, max_devices } = req.body;
-
+// ================= ASSIGN =================
+app.post('/api/assign', async (req, res) => {
   try {
-    // hapus assign lama
-    await db.query(
-      "DELETE FROM user_scripts WHERE user_id=$1",
-      [user_id]
-    );
+    const { user_id, script_id, expire, device } = req.body;
 
-    // insert baru
-    await db.query(
-      "INSERT INTO user_scripts (user_id, script_id, expires_at, max_devices) VALUES ($1,$2,$3,$4)",
-      [user_id, script_id, expires_at, max_devices]
+    await pool.query(
+      `INSERT INTO licenses (user_id, script_id, expire, max_device)
+       VALUES ($1,$2,$3,$4)`,
+      [user_id, script_id, expire, device]
     );
 
     res.json({ success: true });
-  } catch (e) {
-    console.log(e);
+  } catch (err) {
+    console.error(err);
     res.json({ success: false });
   }
 });
 
-// ================= LOGIN (UNTUK EXE) =================
-
-app.post("/api/auth/login", async (req, res) => {
-  const { username, password } = req.body;
-
+// ================= LOGIN =================
+app.post('/api/login', async (req, res) => {
   try {
-    const user = await db.query(
-      "SELECT * FROM users WHERE username=$1 AND password=$2",
+    const { username, password, device_id } = req.body;
+
+    // VALIDASI INPUT
+    if (!username || !password) {
+      return res.json({ success: false, message: "Data kosong" });
+    }
+
+    // CEK USER
+    const user = await pool.query(
+      'SELECT * FROM users WHERE username=$1 AND password=$2',
       [username, password]
     );
 
@@ -140,36 +116,52 @@ app.post("/api/auth/login", async (req, res) => {
 
     const userId = user.rows[0].id;
 
-    const scripts = await db.query(`
-      SELECT s.name, us.expires_at, us.max_devices
-      FROM scripts s
-      JOIN user_scripts us ON s.id = us.script_id
-      WHERE us.user_id = $1
-    `, [userId]);
+    // CEK LICENSE
+    const license = await pool.query(
+      'SELECT * FROM licenses WHERE user_id=$1',
+      [userId]
+    );
 
-    if (scripts.rows.length === 0) {
-      return res.json({
-        success: false,
-        message: "Tidak ada akses script"
-      });
+    if (license.rows.length === 0) {
+      return res.json({ success: false, message: "Belum assign license" });
     }
 
-    res.json({
+    const lic = license.rows[0];
+
+    // CEK EXPIRE
+    if (!lic.expire) {
+      return res.json({ success: false, message: "Expire tidak valid" });
+    }
+
+    if (new Date() > new Date(lic.expire)) {
+      return res.json({ success: false, message: "License expired" });
+    }
+
+    // DEVICE CHECK
+    if (!device_id) {
+      return res.json({ success: false, message: "Device ID kosong" });
+    }
+
+    return res.json({
       success: true,
-      username,
-      scripts: scripts.rows
+      message: "Login berhasil"
     });
 
-  } catch (e) {
-    console.log(e);
-    res.json({ success: false });
+  } catch (err) {
+    console.error("LOGIN ERROR:", err);
+
+    // PENTING: PAKSA JSON
+    return res.json({
+      success: false,
+      message: "Server error"
+    });
   }
 });
 
-// ================= PORT (WAJIB RAILWAY) =================
+// FALLBACK ROUTE (ANTI HTML)
+app.use((req, res) => {
+  res.status(404).json({ error: "Endpoint tidak ditemukan" });
+});
 
 const PORT = process.env.PORT || 3000;
-
-app.listen(PORT, () => {
-  console.log("🚀 SERVER RUNNING ON PORT", PORT);
-});
+app.listen(PORT, () => console.log('Server running'));

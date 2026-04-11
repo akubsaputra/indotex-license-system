@@ -1,52 +1,264 @@
 <!DOCTYPE html>
 <html>
 <head>
+<meta charset="UTF-8">
 <title>INDOTEX ADMIN</title>
+
 <style>
-body { background:#0b1220; color:white; font-family:sans-serif; }
-button { padding:10px; margin:5px; cursor:pointer; }
-input { padding:10px; margin:5px; width:200px; }
-.card { background:#1e293b; padding:20px; border-radius:10px; width:300px; margin:auto; margin-top:100px; }
+body {
+  margin: 0;
+  font-family: Arial;
+  background: #0b1220;
+  color: white;
+}
+
+.sidebar {
+  width: 200px;
+  height: 100vh;
+  background: #0f172a;
+  position: fixed;
+  padding: 20px;
+}
+
+.sidebar h2 { color: #38bdf8; }
+
+.sidebar button {
+  width: 100%;
+  margin-top: 10px;
+  padding: 10px;
+  background: #1e293b;
+  border: none;
+  color: white;
+  cursor: pointer;
+}
+
+.main {
+  margin-left: 220px;
+  padding: 20px;
+}
+
+.card {
+  background: #1e293b;
+  padding: 20px;
+  border-radius: 10px;
+  margin-top: 20px;
+  width: 300px;
+}
+
+input, select {
+  width: 100%;
+  padding: 10px;
+  margin-top: 10px;
+  border: none;
+  border-radius: 5px;
+}
+
+button.action {
+  margin-top: 10px;
+  padding: 10px;
+  border: none;
+  cursor: pointer;
+}
+
+.green { background: #22c55e; }
+.red { background: #ef4444; }
+
+table {
+  width: 100%;
+  margin-top: 20px;
+  border-collapse: collapse;
+}
+
+td, th {
+  padding: 10px;
+  border-bottom: 1px solid #334155;
+}
 </style>
 </head>
+
 <body>
 
-<div class="card">
-  <h2>Create User</h2>
-  <input id="username" placeholder="Username"><br>
-  <input id="password" placeholder="Password"><br>
-  <button onclick="createUser()">Create</button>
+<div class="sidebar">
+  <h2>INDOTEX</h2>
+  <button onclick="showSection('users')">+ User</button>
+  <button onclick="showSection('scripts')">+ Script</button>
+  <button onclick="showSection('assign')">Assign</button>
+</div>
+
+<div class="main">
+
+<div id="usersSection">
+  <h2>Users</h2>
+
+  <div class="card">
+    <h3>Create User</h3>
+    <input id="username" placeholder="Username">
+    <input id="password" placeholder="Password">
+    <button class="action green" onclick="createUser()">Create</button>
+  </div>
+
+  <table id="userTable"></table>
+</div>
+
+<div id="scriptsSection" style="display:none">
+  <h2>Scripts</h2>
+
+  <div class="card">
+    <h3>Create Script</h3>
+    <input id="scriptName" placeholder="Script Name">
+    <button class="action green" onclick="createScript()">Create</button>
+  </div>
+
+  <table id="scriptTable"></table>
+</div>
+
+<div id="assignSection" style="display:none">
+  <h2>Assign Script</h2>
+
+  <div class="card">
+    <select id="assignUser"></select>
+    <select id="assignScript"></select>
+    <input id="expire" type="datetime-local">
+    <input id="device" value="2">
+
+    <button class="action green" onclick="assignScript()">Assign</button>
+  </div>
+</div>
+
 </div>
 
 <script>
 const API = "https://indotex-license-system-production.up.railway.app";
 
-async function createUser() {
+// SWITCH UI
+function showSection(sec) {
+  document.getElementById("usersSection").style.display = "none";
+  document.getElementById("scriptsSection").style.display = "none";
+  document.getElementById("assignSection").style.display = "none";
+
+  if (sec === "users") document.getElementById("usersSection").style.display = "block";
+  if (sec === "scripts") document.getElementById("scriptsSection").style.display = "block";
+  if (sec === "assign") document.getElementById("assignSection").style.display = "block";
+}
+
+// HELPER FETCH
+async function safeFetch(url, options) {
   try {
-    const res = await fetch(API + "/api/users", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        username: document.getElementById("username").value,
-        password: document.getElementById("password").value
-      })
-    });
+    const res = await fetch(url, options);
 
-    const data = await res.json();
-
-    console.log(data);
-
-    if (data.success) {
-      alert("✅ User berhasil dibuat");
-    } else {
-      alert("❌ Gagal");
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error("Server Error: " + text);
     }
 
-  } catch (e) {
-    console.log(e);
-    alert("❌ Gagal connect ke server!");
+    return await res.json();
+  } catch (err) {
+    alert("ERROR: " + err.message);
+    throw err;
   }
 }
+
+// CREATE USER
+async function createUser() {
+  const username = document.getElementById("username").value;
+  const password = document.getElementById("password").value;
+
+  if (!username || !password) {
+    alert("Isi semua field!");
+    return;
+  }
+
+  const data = await safeFetch(API + "/api/users", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({ username, password })
+  });
+
+  alert("User berhasil dibuat!");
+  loadUsers();
+}
+
+// LOAD USERS
+async function loadUsers() {
+  const data = await safeFetch(API + "/api/users");
+
+  let html = "<tr><th>ID</th><th>Username</th></tr>";
+
+  data.users.forEach(u => {
+    html += `<tr><td>${u.id}</td><td>${u.username}</td></tr>`;
+  });
+
+  document.getElementById("userTable").innerHTML = html;
+
+  const select = document.getElementById("assignUser");
+  select.innerHTML = "";
+  data.users.forEach(u => {
+    select.innerHTML += `<option value="${u.id}">${u.username}</option>`;
+  });
+}
+
+// CREATE SCRIPT
+async function createScript() {
+  const name = document.getElementById("scriptName").value;
+
+  if (!name) {
+    alert("Isi nama script!");
+    return;
+  }
+
+  await safeFetch(API + "/api/scripts", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({ name })
+  });
+
+  alert("Script berhasil dibuat!");
+  loadScripts();
+}
+
+// LOAD SCRIPTS
+async function loadScripts() {
+  const data = await safeFetch(API + "/api/scripts");
+
+  let html = "<tr><th>ID</th><th>Name</th></tr>";
+
+  data.scripts.forEach(s => {
+    html += `<tr><td>${s.id}</td><td>${s.name}</td></tr>`;
+  });
+
+  document.getElementById("scriptTable").innerHTML = html;
+
+  const select = document.getElementById("assignScript");
+  select.innerHTML = "";
+  data.scripts.forEach(s => {
+    select.innerHTML += `<option value="${s.id}">${s.name}</option>`;
+  });
+}
+
+// ASSIGN SCRIPT
+async function assignScript() {
+  const user_id = document.getElementById("assignUser").value;
+  const script_id = document.getElementById("assignScript").value;
+  const expire = document.getElementById("expire").value;
+  const device = document.getElementById("device").value;
+
+  await safeFetch(API + "/api/assign", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({
+      user_id,
+      script_id,
+      expire,
+      device
+    })
+  });
+
+  alert("Berhasil assign!");
+}
+
+// INIT
+loadUsers();
+loadScripts();
 </script>
 
 </body>
