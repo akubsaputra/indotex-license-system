@@ -13,13 +13,16 @@
   "dependencies": {
     "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
+    "crypto-js": "^4.2.0",
     "dotenv": "^17.2.3",
+    "electron-store": "^11.0.2",
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
     "pg": "^8.16.3",
     "uuid": "^13.0.0"
   },
   "devDependencies": {
+    "javascript-obfuscator": "^5.4.1",
     "nodemon": "^3.1.14"
   }
 }

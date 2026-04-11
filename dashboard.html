@@ -1,339 +1,253 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>INDOTEX License Dashboard</title>
-    <style>
-        body{
-            font-family:Arial,sans-serif;
-            background:#0f172a;
-            color:#fff;
-            margin:0;
-            padding:20px;
-        }
+<meta charset="UTF-8">
+<title>INDOTEX License Dashboard</title>
 
-        .container{
-            max-width:1500px;
-            margin:auto;
-        }
+<style>
+body {
+  background: #0f172a;
+  color: white;
+  font-family: Arial;
+  padding: 20px;
+}
 
-        .card{
-            background:#1e293b;
-            padding:20px;
-            border-radius:14px;
-            margin-bottom:20px;
-        }
+.container {
+  display: flex;
+  gap: 20px;
+}
 
-        h1,h2{
-            margin-top:0;
-        }
+.card {
+  background: #1e293b;
+  padding: 20px;
+  border-radius: 12px;
+  flex: 1;
+}
 
-        input,select,button{
-            width:100%;
-            padding:12px;
-            margin:6px 0;
-            border:none;
-            border-radius:8px;
-            font-size:14px;
-        }
+input, select {
+  width: 100%;
+  padding: 10px;
+  margin: 5px 0;
+  border-radius: 6px;
+  border: none;
+}
 
-        input,select{
-            background:#334155;
-            color:#fff;
-        }
+button {
+  width: 100%;
+  padding: 10px;
+  background: #2563eb;
+  border: none;
+  color: white;
+  border-radius: 6px;
+  cursor: pointer;
+}
 
-        button{
-            background:#2563eb;
-            color:white;
-            font-weight:bold;
-            cursor:pointer;
-        }
+button:hover {
+  background: #1d4ed8;
+}
 
-        button:hover{
-            background:#1d4ed8;
-        }
-
-        table{
-            width:100%;
-            border-collapse:collapse;
-            margin-top:15px;
-        }
-
-        th,td{
-            padding:12px;
-            border-bottom:1px solid #334155;
-            text-align:left;
-        }
-
-        pre{
-            background:#020617;
-            padding:15px;
-            border-radius:10px;
-            color:#22c55e;
-            white-space:pre-wrap;
-        }
-
-        .grid{
-            display:grid;
-            grid-template-columns:1fr 1fr;
-            gap:20px;
-        }
-
-        @media(max-width:900px){
-            .grid{
-                grid-template-columns:1fr;
-            }
-        }
-    </style>
+.output {
+  margin-top: 20px;
+  background: black;
+  padding: 10px;
+  border-radius: 10px;
+  min-height: 120px;
+}
+</style>
 </head>
+
 <body>
+
+<h1>INDOTEX License Dashboard</h1>
 
 <div class="container">
 
-    <h1>INDOTEX License Dashboard</h1>
+<!-- CREATE PRODUCT -->
+<div class="card">
+<h2>Create Bot / Product</h2>
 
-    <div class="grid">
+<input id="productName" placeholder="Bot/Product Name">
+<button onclick="createProduct()">Create Product</button>
+</div>
 
-        <div>
+<!-- GENERATE LICENSE -->
+<div class="card">
+<h2>Generate License</h2>
 
-            <div class="card">
-                <h2>Create Bot / Product</h2>
+<input id="customerName" placeholder="Customer Name">
+<input id="customerEmail" placeholder="Customer Email">
 
-                <input id="productName" placeholder="Bot/Product Name">
+<select id="productSelect">
+<option>Loading products...</option>
+</select>
 
-                <button onclick="createProduct()">
-                    Create Product
-                </button>
-            </div>
+<input type="datetime-local" id="expiresAt">
 
-            <div class="card">
-                <h2>Generate License</h2>
+<label>
+<input type="checkbox" id="lifetime"> Lifetime License
+</label>
 
-                <input id="customerName" placeholder="Customer Name">
-                <input id="customerEmail" placeholder="Customer Email">
+<input type="number" id="maxDevices" value="1" min="1" max="1000">
 
-                <select id="productSelect"></select>
+<button onclick="generateLicense()">Generate License</button>
+</div>
 
-                <label>Expiration Date / Time</label>
-                <input type="datetime-local" id="expiryDate">
+<!-- ACTION -->
+<div class="card">
+<h2>License Actions</h2>
 
-                <label>
-                    <input type="checkbox" id="lifetime" style="width:auto;">
-                    Lifetime License
-                </label>
+<input id="licenseKey" placeholder="License Key">
 
-                <input type="number" id="maxDevices" min="1" max="1000" value="1">
+<button onclick="validateLicense()">Validate License</button>
+<button onclick="resetDevice()">Reset Device</button>
 
-                <button onclick="generateLicense()">
-                    Generate License
-                </button>
-            </div>
+<select id="status">
+<option value="active">Active</option>
+<option value="suspended">Suspended</option>
+<option value="banned">Banned</option>
+</select>
 
-        </div>
-
-        <div class="card">
-            <h2>License Actions</h2>
-
-            <input id="licenseKey" placeholder="License Key">
-
-            <select id="validateProductSelect"></select>
-
-            <button onclick="validateLicense()">
-                Validate License
-            </button>
-
-            <button onclick="resetDevice()">
-                Reset Device
-            </button>
-
-            <select id="licenseStatus">
-                <option value="active">Active</option>
-                <option value="suspended">Suspended</option>
-                <option value="banned">Banned</option>
-            </select>
-
-            <button onclick="updateStatus()">
-                Update Status
-            </button>
-        </div>
-
-    </div>
-
-    <div class="card">
-        <h2>Output</h2>
-        <pre id="output"></pre>
-    </div>
-
-    <div class="card">
-        <h2>All Licenses</h2>
-
-        <button onclick="loadLicenses()">Refresh Table</button>
-
-        <table>
-            <thead>
-                <tr>
-                    <th>License Key</th>
-                    <th>Product</th>
-                    <th>Customer</th>
-                    <th>Expiry</th>
-                    <th>Devices</th>
-                    <th>Status</th>
-                </tr>
-            </thead>
-            <tbody id="licenseTableBody"></tbody>
-        </table>
-    </div>
+<button onclick="updateStatus()">Update Status</button>
+</div>
 
 </div>
 
+<div class="output" id="output"></div>
+
 <script>
-const API = "http://localhost:3000/api/license";
+const API = "https://indotex-license-system-production.up.railway.app/api/license";
 
-function showOutput(data){
-    document.getElementById("output").textContent =
-        JSON.stringify(data,null,2);
-
-    loadLicenses();
-}
-
-async function createProduct(){
-    const res = await fetch(`${API}/product/create`,{
-        method:"POST",
-        headers:{
-            "Content-Type":"application/json"
-        },
-        body:JSON.stringify({
-            product_name:document.getElementById("productName").value
-        })
-    });
-
-    showOutput(await res.json());
-
-    loadProducts();
-}
-
-async function loadProducts(){
+// ================= LOAD PRODUCTS =================
+async function loadProducts() {
+  try {
     const res = await fetch(`${API}/product/all`);
     const data = await res.json();
 
-    const generateSelect =
-        document.getElementById("productSelect");
+    console.log("PRODUCT RAW:", data);
 
-    const validateSelect =
-        document.getElementById("validateProductSelect");
+    const select = document.getElementById("productSelect");
+    select.innerHTML = "";
 
-    generateSelect.innerHTML = "";
-    validateSelect.innerHTML = "";
+    // HANDLE SEMUA FORMAT RESPONSE
+    let products = [];
 
-    if(!data.products) return;
-
-    data.products.forEach(product=>{
-        const option =
-            `<option value="${product.id}">
-                ${product.product_name}
-            </option>`;
-
-        generateSelect.innerHTML += option;
-        validateSelect.innerHTML += option;
-    });
-}
-
-async function generateLicense(){
-    let expiryDate =
-        document.getElementById("expiryDate").value;
-
-    if(document.getElementById("lifetime").checked){
-        expiryDate = "2099-12-31T23:59";
+    if (Array.isArray(data)) {
+      products = data;
+    } else if (data.products) {
+      products = data.products;
+    } else if (data.data) {
+      products = data.data;
     }
 
-    const res = await fetch(`${API}/generate`,{
-        method:"POST",
-        headers:{
-            "Content-Type":"application/json"
-        },
-        body:JSON.stringify({
-            customer_name:document.getElementById("customerName").value,
-            customer_email:document.getElementById("customerEmail").value,
-            custom_expiry:expiryDate,
-            max_devices:document.getElementById("maxDevices").value,
-            product_id:document.getElementById("productSelect").value
-        })
+    if (products.length === 0) {
+      select.innerHTML = "<option>No products found</option>";
+      return;
+    }
+
+    products.forEach(p => {
+      const opt = document.createElement("option");
+      opt.value = p.id;
+      opt.textContent = p.product_name || p.name || "Unknown";
+      select.appendChild(opt);
     });
 
-    showOutput(await res.json());
+  } catch (err) {
+    console.error("LOAD PRODUCT ERROR:", err);
+  }
 }
 
-async function validateLicense(){
-    const res = await fetch(`${API}/validate`,{
-        method:"POST",
-        headers:{
-            "Content-Type":"application/json"
-        },
-        body:JSON.stringify({
-            license_key:document.getElementById("licenseKey").value,
-            device_id:"TEST-PC-001",
-            product_id:document.getElementById("validateProductSelect").value
-        })
-    });
+// ================= CREATE PRODUCT =================
+async function createProduct() {
+  const name = document.getElementById("productName").value;
 
-    showOutput(await res.json());
+  if (!name) return alert("Isi nama product dulu!");
+
+  const res = await fetch(`${API}/product/create`, {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({ product_name: name })
+  });
+
+  const data = await res.json();
+  show(data);
+
+  // AUTO REFRESH
+  setTimeout(loadProducts, 500);
 }
 
-async function resetDevice(){
-    const res = await fetch(`${API}/reset-device`,{
-        method:"POST",
-        headers:{
-            "Content-Type":"application/json"
-        },
-        body:JSON.stringify({
-            license_key:document.getElementById("licenseKey").value
-        })
-    });
+// ================= GENERATE LICENSE =================
+async function generateLicense() {
+  const res = await fetch(`${API}/generate`, {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({
+      customer_name: document.getElementById("customerName").value,
+      customer_email: document.getElementById("customerEmail").value,
+      product_id: document.getElementById("productSelect").value,
+      expires_at: document.getElementById("lifetime").checked
+        ? null
+        : document.getElementById("expiresAt").value,
+      max_devices: document.getElementById("maxDevices").value
+    })
+  });
 
-    showOutput(await res.json());
+  const data = await res.json();
+  show(data);
 }
 
-async function updateStatus(){
-    const res = await fetch(`${API}/update-status`,{
-        method:"POST",
-        headers:{
-            "Content-Type":"application/json"
-        },
-        body:JSON.stringify({
-            license_key:document.getElementById("licenseKey").value,
-            status:document.getElementById("licenseStatus").value
-        })
-    });
+// ================= VALIDATE =================
+async function validateLicense() {
+  const res = await fetch(`${API}/validate`, {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({
+      license_key: document.getElementById("licenseKey").value,
+      device_id: "ADMIN_TEST_DEVICE",
+      product_id: document.getElementById("productSelect").value
+    })
+  });
 
-    showOutput(await res.json());
+  const data = await res.json();
+  show(data);
 }
 
-async function loadLicenses(){
-    const res = await fetch(`${API}/all`);
-    const data = await res.json();
+// ================= RESET DEVICE =================
+async function resetDevice() {
+  const res = await fetch(`${API}/reset-device`, {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({
+      license_key: document.getElementById("licenseKey").value
+    })
+  });
 
-    const tbody =
-        document.getElementById("licenseTableBody");
-
-    tbody.innerHTML = "";
-
-    if(!data.licenses) return;
-
-    data.licenses.forEach(license=>{
-        tbody.innerHTML += `
-            <tr>
-                <td>${license.license_key}</td>
-                <td>${license.product_name || "-"}</td>
-                <td>${license.customer_name || "-"}</td>
-                <td>${new Date(license.expires_at).toLocaleString()}</td>
-                <td>${license.used_devices} / ${license.max_devices}</td>
-                <td>${license.status}</td>
-            </tr>
-        `;
-    });
+  const data = await res.json();
+  show(data);
 }
 
+// ================= UPDATE STATUS =================
+async function updateStatus() {
+  const res = await fetch(`${API}/update-status`, {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({
+      license_key: document.getElementById("licenseKey").value,
+      status: document.getElementById("status").value
+    })
+  });
+
+  const data = await res.json();
+  show(data);
+}
+
+// ================= OUTPUT =================
+function show(data) {
+  document.getElementById("output").innerText =
+    JSON.stringify(data, null, 2);
+}
+
+// INIT
 loadProducts();
-loadLicenses();
 </script>
 
 </body>
