@@ -1,253 +1,52 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-<meta charset="UTF-8">
-<title>INDOTEX License Dashboard</title>
-
+<title>INDOTEX ADMIN</title>
 <style>
-body {
-  background: #0f172a;
-  color: white;
-  font-family: Arial;
-  padding: 20px;
-}
-
-.container {
-  display: flex;
-  gap: 20px;
-}
-
-.card {
-  background: #1e293b;
-  padding: 20px;
-  border-radius: 12px;
-  flex: 1;
-}
-
-input, select {
-  width: 100%;
-  padding: 10px;
-  margin: 5px 0;
-  border-radius: 6px;
-  border: none;
-}
-
-button {
-  width: 100%;
-  padding: 10px;
-  background: #2563eb;
-  border: none;
-  color: white;
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-button:hover {
-  background: #1d4ed8;
-}
-
-.output {
-  margin-top: 20px;
-  background: black;
-  padding: 10px;
-  border-radius: 10px;
-  min-height: 120px;
-}
+body { background:#0b1220; color:white; font-family:sans-serif; }
+button { padding:10px; margin:5px; cursor:pointer; }
+input { padding:10px; margin:5px; width:200px; }
+.card { background:#1e293b; padding:20px; border-radius:10px; width:300px; margin:auto; margin-top:100px; }
 </style>
 </head>
-
 <body>
 
-<h1>INDOTEX License Dashboard</h1>
-
-<div class="container">
-
-<!-- CREATE PRODUCT -->
 <div class="card">
-<h2>Create Bot / Product</h2>
-
-<input id="productName" placeholder="Bot/Product Name">
-<button onclick="createProduct()">Create Product</button>
+  <h2>Create User</h2>
+  <input id="username" placeholder="Username"><br>
+  <input id="password" placeholder="Password"><br>
+  <button onclick="createUser()">Create</button>
 </div>
-
-<!-- GENERATE LICENSE -->
-<div class="card">
-<h2>Generate License</h2>
-
-<input id="customerName" placeholder="Customer Name">
-<input id="customerEmail" placeholder="Customer Email">
-
-<select id="productSelect">
-<option>Loading products...</option>
-</select>
-
-<input type="datetime-local" id="expiresAt">
-
-<label>
-<input type="checkbox" id="lifetime"> Lifetime License
-</label>
-
-<input type="number" id="maxDevices" value="1" min="1" max="1000">
-
-<button onclick="generateLicense()">Generate License</button>
-</div>
-
-<!-- ACTION -->
-<div class="card">
-<h2>License Actions</h2>
-
-<input id="licenseKey" placeholder="License Key">
-
-<button onclick="validateLicense()">Validate License</button>
-<button onclick="resetDevice()">Reset Device</button>
-
-<select id="status">
-<option value="active">Active</option>
-<option value="suspended">Suspended</option>
-<option value="banned">Banned</option>
-</select>
-
-<button onclick="updateStatus()">Update Status</button>
-</div>
-
-</div>
-
-<div class="output" id="output"></div>
 
 <script>
-const API = "https://indotex-license-system-production.up.railway.app/api/license";
+const API = "https://indotex-license-system-production.up.railway.app";
 
-// ================= LOAD PRODUCTS =================
-async function loadProducts() {
+async function createUser() {
   try {
-    const res = await fetch(`${API}/product/all`);
-    const data = await res.json();
-
-    console.log("PRODUCT RAW:", data);
-
-    const select = document.getElementById("productSelect");
-    select.innerHTML = "";
-
-    // HANDLE SEMUA FORMAT RESPONSE
-    let products = [];
-
-    if (Array.isArray(data)) {
-      products = data;
-    } else if (data.products) {
-      products = data.products;
-    } else if (data.data) {
-      products = data.data;
-    }
-
-    if (products.length === 0) {
-      select.innerHTML = "<option>No products found</option>";
-      return;
-    }
-
-    products.forEach(p => {
-      const opt = document.createElement("option");
-      opt.value = p.id;
-      opt.textContent = p.product_name || p.name || "Unknown";
-      select.appendChild(opt);
+    const res = await fetch(API + "/api/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: document.getElementById("username").value,
+        password: document.getElementById("password").value
+      })
     });
 
-  } catch (err) {
-    console.error("LOAD PRODUCT ERROR:", err);
+    const data = await res.json();
+
+    console.log(data);
+
+    if (data.success) {
+      alert("✅ User berhasil dibuat");
+    } else {
+      alert("❌ Gagal");
+    }
+
+  } catch (e) {
+    console.log(e);
+    alert("❌ Gagal connect ke server!");
   }
 }
-
-// ================= CREATE PRODUCT =================
-async function createProduct() {
-  const name = document.getElementById("productName").value;
-
-  if (!name) return alert("Isi nama product dulu!");
-
-  const res = await fetch(`${API}/product/create`, {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({ product_name: name })
-  });
-
-  const data = await res.json();
-  show(data);
-
-  // AUTO REFRESH
-  setTimeout(loadProducts, 500);
-}
-
-// ================= GENERATE LICENSE =================
-async function generateLicense() {
-  const res = await fetch(`${API}/generate`, {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({
-      customer_name: document.getElementById("customerName").value,
-      customer_email: document.getElementById("customerEmail").value,
-      product_id: document.getElementById("productSelect").value,
-      expires_at: document.getElementById("lifetime").checked
-        ? null
-        : document.getElementById("expiresAt").value,
-      max_devices: document.getElementById("maxDevices").value
-    })
-  });
-
-  const data = await res.json();
-  show(data);
-}
-
-// ================= VALIDATE =================
-async function validateLicense() {
-  const res = await fetch(`${API}/validate`, {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({
-      license_key: document.getElementById("licenseKey").value,
-      device_id: "ADMIN_TEST_DEVICE",
-      product_id: document.getElementById("productSelect").value
-    })
-  });
-
-  const data = await res.json();
-  show(data);
-}
-
-// ================= RESET DEVICE =================
-async function resetDevice() {
-  const res = await fetch(`${API}/reset-device`, {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({
-      license_key: document.getElementById("licenseKey").value
-    })
-  });
-
-  const data = await res.json();
-  show(data);
-}
-
-// ================= UPDATE STATUS =================
-async function updateStatus() {
-  const res = await fetch(`${API}/update-status`, {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({
-      license_key: document.getElementById("licenseKey").value,
-      status: document.getElementById("status").value
-    })
-  });
-
-  const data = await res.json();
-  show(data);
-}
-
-// ================= OUTPUT =================
-function show(data) {
-  document.getElementById("output").innerText =
-    JSON.stringify(data, null, 2);
-}
-
-// INIT
-loadProducts();
 </script>
 
 </body>

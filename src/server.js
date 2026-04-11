@@ -1,215 +1,175 @@
-require('dotenv').config();
-const express = require('express');
-const cors = require('cors');
-const { Pool } = require('pg');
-const { v4: uuidv4 } = require('uuid');
+require("dotenv").config();
+
+const express = require("express");
+const cors = require("cors");
+const { Pool } = require("pg");
 
 const app = express();
-app.use(cors());
+
+// ================= MIDDLEWARE =================
+app.use(cors({
+  origin: "*"
+}));
 app.use(express.json());
 
-const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false }
+// ================= DATABASE =================
+const db = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false
+  }
 });
 
+// TEST CONNECTION
+db.connect()
+  .then(() => console.log("✅ DB CONNECTED"))
+  .catch(err => console.log("❌ DB ERROR:", err));
 
 // ================= ROOT =================
-app.get('/', (req, res) => {
-    res.send('INDOTEX LICENSE API RUNNING 🚀');
+app.get("/", (req, res) => {
+  res.send("INDOTEX LICENSE API RUNNING 🚀");
 });
 
+// ================= USERS =================
 
-// ================= CREATE PRODUCT =================
-app.post('/api/products', async (req, res) => {
-    try {
-        const { name } = req.body;
+// GET USERS
+app.get("/api/users", async (req, res) => {
+  try {
+    const result = await db.query("SELECT * FROM users ORDER BY id DESC");
+    res.json({ users: result.rows });
+  } catch (e) {
+    console.log(e);
+    res.json({ users: [] });
+  }
+});
 
-        const result = await pool.query(
-            `INSERT INTO products (id, product_name)
-             VALUES ($1, $2)
-             RETURNING *`,
-            [uuidv4(), name]
-        );
+// CREATE USER
+app.post("/api/users", async (req, res) => {
+  const { username, password } = req.body;
 
-        res.json({ success: true, product: result.rows[0] });
+  try {
+    await db.query(
+      "INSERT INTO users (username, password) VALUES ($1,$2)",
+      [username, password]
+    );
 
-    } catch (err) {
-        console.log(err);
-        res.json({ success: false, message: 'Error create product' });
+    res.json({ success: true });
+  } catch (e) {
+    console.log(e);
+    res.json({ success: false });
+  }
+});
+
+// DELETE USER
+app.delete("/api/users/:id", async (req, res) => {
+  try {
+    await db.query("DELETE FROM users WHERE id=$1", [req.params.id]);
+    res.json({ success: true });
+  } catch (e) {
+    res.json({ success: false });
+  }
+});
+
+// ================= SCRIPTS =================
+
+// GET SCRIPTS
+app.get("/api/scripts", async (req, res) => {
+  try {
+    const result = await db.query("SELECT * FROM scripts ORDER BY id DESC");
+    res.json({ scripts: result.rows });
+  } catch (e) {
+    res.json({ scripts: [] });
+  }
+});
+
+// CREATE SCRIPT
+app.post("/api/scripts", async (req, res) => {
+  const { name } = req.body;
+
+  try {
+    await db.query(
+      "INSERT INTO scripts (name) VALUES ($1)",
+      [name]
+    );
+
+    res.json({ success: true });
+  } catch (e) {
+    res.json({ success: false });
+  }
+});
+
+// ================= ASSIGN SCRIPT =================
+
+app.post("/api/assign-script", async (req, res) => {
+  const { user_id, script_id, expires_at, max_devices } = req.body;
+
+  try {
+    // hapus assign lama
+    await db.query(
+      "DELETE FROM user_scripts WHERE user_id=$1",
+      [user_id]
+    );
+
+    // insert baru
+    await db.query(
+      "INSERT INTO user_scripts (user_id, script_id, expires_at, max_devices) VALUES ($1,$2,$3,$4)",
+      [user_id, script_id, expires_at, max_devices]
+    );
+
+    res.json({ success: true });
+  } catch (e) {
+    console.log(e);
+    res.json({ success: false });
+  }
+});
+
+// ================= LOGIN (UNTUK EXE) =================
+
+app.post("/api/auth/login", async (req, res) => {
+  const { username, password } = req.body;
+
+  try {
+    const user = await db.query(
+      "SELECT * FROM users WHERE username=$1 AND password=$2",
+      [username, password]
+    );
+
+    if (user.rows.length === 0) {
+      return res.json({ success: false, message: "User tidak ditemukan" });
     }
-});
 
+    const userId = user.rows[0].id;
 
-// ================= GET PRODUCTS =================
-app.get('/api/products', async (req, res) => {
-    try {
-        const result = await pool.query(`SELECT * FROM products ORDER BY created_at DESC`);
-        res.json({ success: true, products: result.rows });
-    } catch (err) {
-        res.json({ success: false });
+    const scripts = await db.query(`
+      SELECT s.name, us.expires_at, us.max_devices
+      FROM scripts s
+      JOIN user_scripts us ON s.id = us.script_id
+      WHERE us.user_id = $1
+    `, [userId]);
+
+    if (scripts.rows.length === 0) {
+      return res.json({
+        success: false,
+        message: "Tidak ada akses script"
+      });
     }
+
+    res.json({
+      success: true,
+      username,
+      scripts: scripts.rows
+    });
+
+  } catch (e) {
+    console.log(e);
+    res.json({ success: false });
+  }
 });
 
+// ================= PORT (WAJIB RAILWAY) =================
 
-// ================= GENERATE LICENSE =================
-app.post('/api/license/generate', async (req, res) => {
-    try {
-        const {
-            customer_name,
-            customer_email,
-            product_id,
-            expires_at,
-            max_devices
-        } = req.body;
-
-        const licenseKey = "INDOTEX-" + Math.random().toString(36).substring(2, 10).toUpperCase();
-
-        const result = await pool.query(
-            `INSERT INTO licenses 
-            (id, license_key, customer_name, customer_email, product_id, expires_at, status, max_devices)
-            VALUES ($1,$2,$3,$4,$5,$6,'active',$7)
-            RETURNING *`,
-            [
-                uuidv4(),
-                licenseKey,
-                customer_name,
-                customer_email,
-                product_id,
-                expires_at || null,
-                max_devices || 1
-            ]
-        );
-
-        res.json({
-            success: true,
-            message: "License generated successfully",
-            license: result.rows[0]
-        });
-
-    } catch (err) {
-        console.log(err);
-        res.json({ success: false, message: "Generate error" });
-    }
-});
-
-
-// ================= VALIDATE LICENSE (FIX TOTAL) =================
-app.post('/api/license/validate', async (req, res) => {
-    try {
-        const { license_key, hwid } = req.body;
-
-        if (!license_key) {
-            return res.json({ success: false, message: "License required" });
-        }
-
-        const result = await pool.query(
-            `SELECT * FROM licenses WHERE license_key = $1`,
-            [license_key]
-        );
-
-        if (result.rows.length === 0) {
-            return res.json({ success: false, message: "License not found" });
-        }
-
-        const license = result.rows[0];
-
-        // status check
-        if (license.status !== 'active') {
-            return res.json({ success: false, message: "License inactive" });
-        }
-
-        // expired check
-        if (license.expires_at && new Date() > new Date(license.expires_at)) {
-            return res.json({ success: false, message: "License expired" });
-        }
-
-        // ================= DEVICE SYSTEM =================
-        const deviceCheck = await pool.query(
-            `SELECT * FROM devices WHERE license_id = $1 AND hwid = $2`,
-            [license.id, hwid]
-        );
-
-        if (deviceCheck.rows.length === 0) {
-            // cek jumlah device
-            const count = await pool.query(
-                `SELECT COUNT(*) FROM devices WHERE license_id = $1`,
-                [license.id]
-            );
-
-            if (parseInt(count.rows[0].count) >= license.max_devices) {
-                return res.json({ success: false, message: "Device limit reached" });
-            }
-
-            // insert device baru
-            await pool.query(
-                `INSERT INTO devices (id, license_id, hwid)
-                 VALUES ($1,$2,$3)`,
-                [uuidv4(), license.id, hwid]
-            );
-        }
-
-        return res.json({
-            success: true,
-            message: "License valid",
-            product_id: license.product_id
-        });
-
-    } catch (err) {
-        console.log(err);
-        res.json({ success: false, message: "Server error" });
-    }
-});
-
-
-// ================= RESET DEVICE =================
-app.post('/api/license/reset-device', async (req, res) => {
-    try {
-        const { license_key } = req.body;
-
-        const license = await pool.query(
-            `SELECT * FROM licenses WHERE license_key = $1`,
-            [license_key]
-        );
-
-        if (license.rows.length === 0) {
-            return res.json({ success: false });
-        }
-
-        await pool.query(
-            `DELETE FROM devices WHERE license_id = $1`,
-            [license.rows[0].id]
-        );
-
-        res.json({ success: true, message: "Device reset success" });
-
-    } catch (err) {
-        res.json({ success: false });
-    }
-});
-
-
-// ================= UPDATE STATUS =================
-app.post('/api/license/update-status', async (req, res) => {
-    try {
-        const { license_key, status } = req.body;
-
-        await pool.query(
-            `UPDATE licenses SET status = $1 WHERE license_key = $2`,
-            [status, license_key]
-        );
-
-        res.json({ success: true });
-
-    } catch (err) {
-        res.json({ success: false });
-    }
-});
-
-
-// ================= START SERVER =================
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-    console.log("🚀 Server running on port", PORT);
+  console.log("🚀 SERVER RUNNING ON PORT", PORT);
 });
