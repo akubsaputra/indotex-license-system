@@ -1,21 +1,28 @@
 import express from "express";
 import cors from "cors";
+import path from "path";
+import { fileURLToPath } from "url";
 
 const app = express();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 app.use(cors());
 app.use(express.json());
+app.use(express.static(__dirname + "/../../")); // akses dashboard.html
 
-// ===== DATABASE SEMENTARA (memory) =====
+// ===== DATABASE MEMORY =====
 let users = [];
 let scripts = [];
 let licenses = [];
 
 // ===== USERS =====
-app.get("/api/users", (req, res) => {
-  res.json({ users });
+app.get("/api/users", (req,res)=>{
+  res.json({ users, licenses });
 });
 
-app.post("/api/users", (req, res) => {
+app.post("/api/users", (req,res)=>{
   const { username, password } = req.body;
 
   const user = {
@@ -25,16 +32,15 @@ app.post("/api/users", (req, res) => {
   };
 
   users.push(user);
-
-  res.json({ success: true, user });
+  res.json({ user });
 });
 
 // ===== SCRIPTS =====
-app.get("/api/scripts", (req, res) => {
+app.get("/api/scripts",(req,res)=>{
   res.json({ scripts });
 });
 
-app.post("/api/scripts", (req, res) => {
+app.post("/api/scripts",(req,res)=>{
   const { name } = req.body;
 
   const script = {
@@ -43,55 +49,45 @@ app.post("/api/scripts", (req, res) => {
   };
 
   scripts.push(script);
-
-  res.json({ success: true, script });
+  res.json({ script });
 });
 
-// ===== ASSIGN LICENSE =====
-app.post("/api/license/assign", (req, res) => {
+// ===== ASSIGN =====
+app.post("/api/license/assign",(req,res)=>{
   const { user_id, script_id, expired, max_device } = req.body;
 
-  licenses.push({
-    user_id,
-    script_id,
-    expired,
-    max_device
-  });
+  const existing = licenses.find(l=>l.user_id==user_id);
 
-  res.json({ success: true });
+  if(existing){
+    existing.script_id = script_id;
+    existing.expired = expired;
+    existing.max_device = max_device;
+  }else{
+    licenses.push({
+      user_id,
+      script_id,
+      expired,
+      max_device,
+      banned:false
+    });
+  }
+
+  res.json({ success:true });
 });
 
-// ===== LOGIN (INI YANG EXE BUTUH) =====
-app.post("/api/login", (req, res) => {
-  const { username, password } = req.body;
+// ===== DELETE =====
+app.delete("/api/users/:id",(req,res)=>{
+  const id = parseInt(req.params.id);
 
-  const user = users.find(
-    u => u.username === username && u.password === password
-  );
+  users = users.filter(u=>u.id!==id);
+  licenses = licenses.filter(l=>l.user_id!==id);
 
-  if (!user) {
-    return res.json({ success: false, message: "Login gagal" });
-  }
-
-  const userLicense = licenses.find(l => l.user_id == user.id);
-
-  if (!userLicense) {
-    return res.json({ success: false, message: "Belum assign script" });
-  }
-
-  res.json({
-    success: true,
-    user,
-    license: userLicense
-  });
+  res.json({ success:true });
 });
 
 // ===== ROOT =====
-app.get("/", (req, res) => {
-  res.send("INDOTEX API RUNNING");
+app.get("/",(req,res)=>{
+  res.sendFile(__dirname + "/../../dashboard.html");
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log("Server jalan di port", PORT);
-});
+app.listen(3000,()=>console.log("🔥 http://localhost:3000"));

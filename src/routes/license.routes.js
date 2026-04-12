@@ -2,45 +2,34 @@ const express = require("express");
 const router = express.Router();
 const pool = require("../config/db");
 
-// GET SCRIPTS
-router.get("/scripts", async (req, res) => {
-  try {
-    const result = await pool.query("SELECT * FROM scripts ORDER BY id DESC");
-    res.json({ scripts: result.rows });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// CREATE SCRIPT
-router.post("/scripts", async (req, res) => {
-  try {
-    const { name } = req.body;
-
-    await pool.query(
-      "INSERT INTO scripts (name) VALUES ($1)",
-      [name]
-    );
-
-    res.json({ message: "Script dibuat" });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ASSIGN
+// ASSIGN SCRIPT KE USER
 router.post("/assign", async (req, res) => {
   try {
-    const { user_id, script_id, expire, device } = req.body;
+    const { user_id, script_id, expired, max_device } = req.body;
 
-    await pool.query(
-      "INSERT INTO licenses (user_id, script_id, expire, max_device) VALUES ($1,$2,$3,$4)",
-      [user_id, script_id, expire, device]
+    // cek existing
+    const existing = await pool.query(
+      "SELECT * FROM licenses WHERE user_id=$1",
+      [user_id]
     );
 
-    res.json({ message: "Assign berhasil" });
+    if(existing.rows.length > 0){
+      await pool.query(
+        "UPDATE licenses SET script_id=$1, expired=$2, max_device=$3 WHERE user_id=$4",
+        [script_id, expired, max_device, user_id]
+      );
+    } else {
+      await pool.query(
+        "INSERT INTO licenses (user_id, script_id, expired, max_device) VALUES ($1,$2,$3,$4)",
+        [user_id, script_id, expired, max_device]
+      );
+    }
+
+    res.json({ success:true });
+
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.json({ success:false });
   }
 });
 
