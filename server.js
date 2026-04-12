@@ -1,122 +1,206 @@
 const express = require("express");
 const cors = require("cors");
-const path = require("path");
+const { Pool } = require("pg");
 
 const app = express();
+const PORT = process.env.PORT || 3000;
 
+// 🔥 ANTI CRASH GLOBAL
+process.on("uncaughtException", err => {
+  console.error("UNCAUGHT ERROR:", err);
+});
+process.on("unhandledRejection", err => {
+  console.error("UNHANDLED REJECTION:", err);
+});
+
+// 🔥 MIDDLEWARE
 app.use(cors());
 app.use(express.json());
 
-// serve file luar backend (dashboard, login, bot)
-app.use(express.static(path.join(__dirname, "..")));
-
-// ===== STORAGE =====
-let users = [];
-let licenses = [];
-
-// ===== TEST =====
-app.get("/test", (req,res)=>{
-  res.send("SERVER HIDUP 🔥");
+// 🔥 DATABASE (Railway auto pakai DATABASE_URL)
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
 });
 
-// ===== CREATE USER =====
-app.post("/api/users", (req,res)=>{
-  const { username, password } = req.body;
+// 🔥 INIT TABLE (AUTO CREATE)
+async function initDB() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id BIGINT PRIMARY KEY,
+        username TEXT,
+        password TEXT
+      );
+    `);
 
-  if(!username || !password){
-    return res.json({ success:false, message:"Data kosong" });
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS licenses (
+        id SERIAL PRIMARY KEY,
+        user_id BIGINT,
+        expired TIMESTAMP,
+        max_device INT DEFAULT 1
+      );
+    `);
+
+    console.log("✅ Database ready");
+  } catch (err) {
+    console.error("DB INIT ERROR:", err);
   }
+}
+initDB();
 
-  const exist = users.find(u=>u.username === username);
-  if(exist){
-    return res.json({ success:false, message:"User sudah ada" });
-  }
 
-  const user = {
-    id: Date.now(),
-    username,
-    password
-  };
+// =======================
+// 🔐 LOGIN
+// =======================
+app.post("/api/login", async (req, res) => {
+  try {
+    const { username, password } = req.body;
 
-  users.push(user);
+    const result = await pool.query(
+      "SELECT * FROM users WHERE username=$1 AND password=$2",
+      [username, password]
+    );
 
-  res.json({ success:true, user });
-});
+    if (result.rows.length === 0) {
+      return res.json({ success: false, message: "Login gagal" });
+    }
 
-// ===== GET USERS =====
-app.get("/api/users",(req,res)=>{
-  res.json({ users, licenses });
-});
+    const user = result.rows[0];
 
-// ===== LOGIN (UNTUK EXE) =====
-app.post("/api/login",(req,res)=>{
-  const { username, password } = req.body;
+    const license = await pool.query(
+      "SELECT * FROM licenses WHERE user_id=$1",
+      [user.id]
+    );
 
-  const user = users.find(
-    u => u.username === username && u.password === password
-  );
-
-  if(!user){
-    return res.json({ success:false });
-  }
-
-  const license = licenses.find(l=>l.user_id == user.id);
-
-  // tidak wajib license biar bot tetap jalan
-  res.json({
-    success:true,
-    user,
-    license: license || null
-  });
-});
-
-// ===== ASSIGN LICENSE =====
-app.post("/api/license/assign",(req,res)=>{
-  const { user_id, expired, max_device } = req.body;
-
-  const existing = licenses.find(l=>l.user_id==user_id);
-
-  if(existing){
-    existing.expired = expired;
-    existing.max_device = max_device;
-  }else{
-    licenses.push({
-      user_id,
-      expired,
-      max_device
+    res.json({
+      success: true,
+      user,
+      license: license.rows[0] || null
     });
+
+  } catch (err) {
+    console.error("LOGIN ERROR:", err);
+    res.json({ success: false, message: "Server error" });
   }
-
-  res.json({ success:true });
 });
 
-// ===== DELETE USER =====
-app.delete("/api/users/:id",(req,res)=>{
-  const id = parseInt(req.params.id);
 
-  users = users.filter(u=>u.id!==id);
-  licenses = licenses.filter(l=>l.user_id!==id);
+// =======================
+// 👤 CREATE USER
+// =======================
+app.post("/api/users", async (req, res) => {
+  try {
+    const { username, password } = req.body;
 
-  res.json({ success:true });
+    const id = Date.now();
+
+    await pool.query(
+      "INSERT INTO users (id, username, password) VALUES ($1,$2,$3)",
+      [id, username, password]
+    );
+
+    res.json({ success: true });
+
+  } catch (err) {
+    console.error("CREATE USER ERROR:", err);
+    res.json({ success: false });
+  }
 });
 
-// ===== ROOT =====
-app.get("/",(req,res)=>{
-  res.sendFile(path.join(__dirname, "..", "dashboard.html"));
+
+// =======================
+// 📋 GET USERS
+// =======================
+app.get("/api/users", async (req, res) => {
+  try {
+    const users = await pool.query("SELECT * FROM users ORDER BY id DESC");
+    res.json({ users: users.rows });
+  } catch (err) {
+    console.error("GET USERS ERROR:", err);
+    res.json({ users: [] });
+  }
 });
 
-// ===== START =====
-app.listen(3000,()=>{
-  console.log("🔥 SERVER RUNNING http://localhost:3000");
+
+// =======================
+// ❌ DELETE USER
+// =======================
+app.delete("/api/users/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    await pool.query("DELETE FROM users WHERE id=$1", [id]);
+    await pool.query("DELETE FROM licenses WHERE user_id=$1", [id]);
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("DELETE USER ERROR:", err);
+    res.json({ success: false });
+  }
 });
 
-// ===== GET LICENSE =====
+
+// =======================
+// 🎟️ ASSIGN LICENSE
+// =======================
+app.post("/api/license", async (req, res) => {
+  try {
+    const { user_id, expired, max_device } = req.body;
+
+    // hapus lama
+    await pool.query("DELETE FROM licenses WHERE user_id=$1", [user_id]);
+
+    // insert baru
+    await pool.query(
+      "INSERT INTO licenses (user_id, expired, max_device) VALUES ($1,$2,$3)",
+      [user_id, expired, max_device]
+    );
+
+    res.json({ success: true });
+
+  } catch (err) {
+    console.error("LICENSE ERROR:", err);
+    res.json({ success: false });
+  }
+});
+
+
+// =======================
+// 📋 GET LICENSE LIST
+// =======================
 app.get("/api/license", async (req, res) => {
   try {
-    const result = await pool.query("SELECT * FROM licenses");
-    res.json({ licenses: result.rows });
+    const result = await pool.query(`
+      SELECT 
+        users.id,
+        users.username,
+        licenses.expired,
+        licenses.max_device
+      FROM users
+      LEFT JOIN licenses ON users.id = licenses.user_id
+      ORDER BY users.id DESC
+    `);
+
+    res.json({ data: result.rows });
+
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Gagal ambil license" });
+    console.error("GET LICENSE ERROR:", err);
+    res.json({ data: [] });
   }
+});
+
+
+// =======================
+// 🚀 ROOT
+// =======================
+app.get("/", (req, res) => {
+  res.send("INDOTEX API RUNNING 🚀");
+});
+
+
+// =======================
+app.listen(PORT, () => {
+  console.log("Server running on port", PORT);
 });
