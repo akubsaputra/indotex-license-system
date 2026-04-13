@@ -19,7 +19,7 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-// TEST KONEKSI DB
+// TEST DB
 pool.connect()
   .then(() => console.log("DB CONNECTED ✅"))
   .catch(err => console.error("DB ERROR ❌", err));
@@ -32,23 +32,52 @@ app.get('/', (req, res) => {
 });
 
 // =======================
-// DEBUG ROUTE
+// TEST API
 // =======================
 app.get('/api/test', (req, res) => {
-  res.json({ success: true, message: "API OK 🔥" });
+  res.json({ success: true });
 });
 
 // =======================
-// GET USERS
+// LOGIN (FIX TOTAL)
 // =======================
-app.get('/api/users', async (req, res) => {
+app.post('/api/login', async (req, res) => {
+  console.log("LOGIN HIT 🔥 BODY:", req.body);
+
+  const { username, password } = req.body || {};
+
+  if (!username || !password) {
+    return res.json({
+      success: false,
+      message: "Username/password kosong"
+    });
+  }
+
   try {
-    const result = await pool.query('SELECT id, username FROM users');
-    console.log("GET USERS:", result.rows.length);
-    res.json({ users: result.rows });
+    const result = await pool.query(
+      'SELECT * FROM users WHERE username=$1 AND password=$2',
+      [username, password]
+    );
+
+    if (result.rows.length === 0) {
+      return res.json({
+        success: false,
+        message: "User tidak ditemukan"
+      });
+    }
+
+    return res.json({
+      success: true,
+      user: result.rows[0]
+    });
+
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: err.message });
+    console.error("LOGIN ERROR:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: err.message
+    });
   }
 });
 
@@ -56,10 +85,13 @@ app.get('/api/users', async (req, res) => {
 // CREATE USER
 // =======================
 app.post('/api/create-user', async (req, res) => {
-  const { username, password } = req.body;
+  const { username, password } = req.body || {};
 
   if (!username || !password) {
-    return res.json({ success: false, message: "Isi semua field!" });
+    return res.json({
+      success: false,
+      message: "Isi semua field!"
+    });
   }
 
   try {
@@ -67,8 +99,6 @@ app.post('/api/create-user', async (req, res) => {
       'INSERT INTO users (username, password) VALUES ($1,$2)',
       [username, password]
     );
-
-    console.log("USER CREATED:", username);
 
     res.json({ success: true });
 
@@ -79,58 +109,35 @@ app.post('/api/create-user', async (req, res) => {
 });
 
 // =======================
-// 🔥 LOGIN FIX TOTAL
+// USERS
 // =======================
-app.post('/api/login', async (req, res) => {
-  console.log("LOGIN HIT 🔥");
-
-  const { username, password } = req.body;
-
-  if (!username || !password) {
-    return res.json({ success: false, message: "Username/password kosong" });
-  }
-
+app.get('/api/users', async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT * FROM users WHERE username=$1 AND password=$2',
-      [username, password]
+      'SELECT id, username FROM users'
     );
-
-    if (result.rows.length === 0) {
-      return res.json({ success: false, message: "User tidak ditemukan" });
-    }
-
-    console.log("LOGIN SUCCESS:", username);
-
-    res.json({
-      success: true,
-      user: result.rows[0]
-    });
-
+    res.json({ users: result.rows });
   } catch (err) {
-    console.error("LOGIN ERROR:", err);
     res.status(500).json({ error: err.message });
   }
 });
 
 // =======================
-// HANDLE 404 (BIAR JELAS)
+// 404 LAST
 // =======================
 app.use((req, res) => {
   res.status(404).json({
     success: false,
-    message: "Route tidak ditemukan ❌"
+    message: "Route tidak ditemukan ❌",
+    path: req.originalUrl
   });
 });
 
 // =======================
-// START SERVER
+// START
 // =======================
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
-  console.log("=================================");
-  console.log("🚀 SERVER RUNNING ON PORT", PORT);
-  console.log("🔥 LOGIN API AKTIF");
-  console.log("=================================");
+  console.log("🚀 SERVER RUNNING:", PORT);
 });
